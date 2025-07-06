@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>E-Career Hunt - Prototaip</title>
+<style>
+  body { font-family: Arial, sans-serif; background:#f0f0f0; margin:0; padding:20px;}
+  .container { max-width: 700px; margin: auto; background: #fff; padding: 20px; border-radius: 8px;}
+  h1, h2 { text-align: center; }
+  .hidden { display: none; }
+  button { padding: 10px 15px; margin: 10px 0; cursor: pointer; }
+  input, select { padding: 8px; width: 100%; margin: 8px 0; box-sizing: border-box; }
+  .question { margin-bottom: 15px; }
+  .leaderboard { margin-top: 20px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+  th { background: #eee; }
+</style>
+</head>
+<body>
+
+<div class="container" id="login-register">
+  <h1>E-Career Hunt</h1>
+  <h2>Daftar / Login</h2>
+  <label>Pilih Peranan:</label>
+  <select id="roleSelect">
+    <option value="player">Pemain</option>
+    <option value="admin">Admin</option>
+  </select>
+
+  <div id="playerForm">
+    <label>Nama:</label>
+    <input type="text" id="playerName" placeholder="Masukkan nama anda" />
+    <label>Nama Kelas:</label>
+    <input type="text" id="playerClass" placeholder="Masukkan nama kelas" />
+    <button onclick="registerPlayer()">Daftar & Mula Main</button>
+  </div>
+
+  <div id="adminForm" class="hidden">
+    <label>Kata Laluan Admin:</label>
+    <input type="password" id="adminPassword" placeholder="Masukkan kata laluan" />
+    <button onclick="loginAdmin()">Login Admin</button>
+  </div>
+</div>
+
+<div class="container hidden" id="gameContainer">
+  <h2 id="welcomePlayer"></h2>
+  <div id="gameArea">
+    <!-- Cabaran akan dimuatkan di sini -->
+  </div>
+  <button onclick="nextChallenge()">Cabaran Seterusnya</button>
+  <h3>Markah Sementara: <span id="currentScore">0</span></h3>
+</div>
+
+<div class="container hidden" id="leaderboardContainer">
+  <h2>Leaderboard</h2>
+  <table id="leaderboardTable">
+    <thead>
+      <tr><th>Nama</th><th>Kelas</th><th>Markah</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <button onclick="restartGame()">Mula Semula</button>
+</div>
+
+<div class="container hidden" id="adminPanel">
+  <h2>Panel Admin - Laporan Pemain</h2>
+  <table id="adminReportTable">
+    <thead>
+      <tr><th>Nama</th><th>Kelas</th><th>Markah</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <h3>Juara: <span id="champion"></span></h3>
+  <button onclick="logoutAdmin()">Logout Admin</button>
+</div>
+
+<script>
+  // Data pemain & admin
+  const adminPassword = "admin123"; // Kata laluan admin (boleh tukar)
+  let players = [];
+  let currentPlayer = null;
+  let currentScore = 0;
+  let currentChallengeIndex = 0;
+
+  // Senarai cabaran (ringkas)
+  const challenges = [
+    { 
+      id: "multipleChoice", 
+      name: "Multiple Choice", 
+      mark: 15,
+      run: multipleChoiceChallenge
+    },
+    { 
+      id: "memoryGame", 
+      name: "Memory Game", 
+      mark: 15,
+      run: memoryGameChallenge
+    }
+    // Boleh tambah cabaran lain di sini
+  ];
+
+  // UI elemen
+  const loginRegisterDiv = document.getElementById("login-register");
+  const playerForm = document.getElementById("playerForm");
+  const adminForm = document.getElementById("adminForm");
+  const roleSelect = document.getElementById("roleSelect");
+  const gameContainer = document.getElementById("gameContainer");
+  const welcomePlayer = document.getElementById("welcomePlayer");
+  const gameArea = document.getElementById("gameArea");
+  const currentScoreSpan = document.getElementById("currentScore");
+  const leaderboardContainer = document.getElementById("leaderboardContainer");
+  const leaderboardTableBody = document.querySelector("#leaderboardTable tbody");
+  const adminPanel = document.getElementById("adminPanel");
+  const adminReportTableBody = document.querySelector("#adminReportTable tbody");
+  const championSpan = document.getElementById("champion");
+
+  // Tukar form ikut peranan
+  roleSelect.addEventListener("change", () => {
+    if (roleSelect.value === "player") {
+      playerForm.classList.remove("hidden");
+      adminForm.classList.add("hidden");
+    } else {
+      playerForm.classList.add("hidden");
+      adminForm.classList.remove("hidden");
+    }
+  });
+
+  // Daftar pemain
+  function registerPlayer() {
+    const name = document.getElementById("playerName").value.trim();
+    const kelas = document.getElementById("playerClass").value.trim();
+    if (!name || !kelas) {
+      alert("Sila isi nama dan nama kelas.");
+      return;
+    }
+    currentPlayer = { nama: name, kelas: kelas, markah: 0 };
+    players.push(currentPlayer);
+    startGame();
+  }
+
+  // Login admin
+  function loginAdmin() {
+    const pass = document.getElementById("adminPassword").value;
+    if (pass === adminPassword) {
+      loginRegisterDiv.classList.add("hidden");
+      adminPanel.classList.remove("hidden");
+      showAdminReport();
+    } else {
+      alert("Kata laluan admin salah.");
+    }
+  }
+
+  // Mula permainan
+  function startGame() {
+    loginRegisterDiv.classList.add("hidden");
+    gameContainer.classList.remove("hidden");
+    welcomePlayer.textContent = `Selamat datang, ${currentPlayer.nama} (${currentPlayer.kelas})`;
+    currentScore = 0;
+    currentChallengeIndex = 0;
+    currentScoreSpan.textContent = currentScore;
+    loadChallenge(currentChallengeIndex);
+  }
+
+  // Muat cabaran ikut index
+  function loadChallenge(index) {
+    if (index >= challenges.length) {
+      endGame();
+      return;
+    }
+    gameArea.innerHTML = `<h3>Cabaran: ${challenges[index].name}</h3>`;
+    challenges[index].run();
+  }
+
+  // Cabaran Multiple Choice (contoh)
+  function multipleChoiceChallenge() {
+    const question = "Apakah kerjaya yang melibatkan reka bentuk laman web?";
+    const options = ["Doktor", "Jurutera Perisian", "Guru", "Arkitek"];
+    let selected = null;
+
+    const container = document.createElement("div");
+    container.className = "question";
+
+    const qElem = document.createElement("p");
+    qElem.textContent = question;
+    container.appendChild(qElem);
+
+    options.forEach((opt, i) => {
+      const label = document.createElement("label");
+      label.style.display = "block";
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "mcq";
+      radio.value = opt;
+      radio.onclick = () => selected = opt;
+      label.appendChild(radio);
+      label.appendChild(document.createTextNode(opt));
+      container.appendChild(label);
+    });
+
+    const submitBtn = document.createElement("button");
+    submitBtn.textContent = "Hantar Jawapan";
+    submitBtn.onclick = () => {
+      if (!selected) {
+        alert("Sila pilih jawapan.");
+        return;
+      }
+      if (selected === "Jurutera Perisian") {
+        alert("Betul! Anda mendapat 15 markah.");
+        currentScore += challenges[currentChallengeIndex].mark;
+      } else {
+        alert("Salah. Tiada markah diberikan.");
+      }
+      currentScoreSpan.textContent = currentScore;
+      submitBtn.disabled = true;
+    };
+
+    container.appendChild(submitBtn);
+    gameArea.appendChild(container);
+  }
+
+  // Cabaran Memory Game (contoh ringkas)
+  function memoryGameChallenge() {
+    const cards = ["A", "B", "A", "B"];
+    let flipped = [];
+    let matchedPairs = 0;
+    let canFlip = true;
+
+    gameArea.innerHTML = "";
+    const board = document.createElement("div");
+    board.style.display = "grid";
+    board.style.gridTemplateColumns = "repeat(2, 50px)";
+    board.style.gap = "10px";
+
+    cards.sort(() => Math.random() - 0.5);
+
+    cards.forEach((card, index) => {
+      const cardElem = document.createElement("div");
+      cardElem.textContent = "?";
+      cardElem.style.width = "50px";
+      cardElem.style.height = "50px";
+      cardElem.style.background = "#ccc";
+      cardElem.style.display = "flex";
+      cardElem.style.alignItems = "center";
+      cardElem.style.justifyContent = "center";
+      cardElem.style.cursor = "pointer";
+      cardElem.style.fontWeight = "bold";
+      cardElem.style.fontSize = "24px";
+      cardElem.dataset.value = card;
+
+      cardElem.onclick = () => {
+        if (!canFlip || flipped.includes(cardElem) || flipped.length === 2) return;
+        cardElem.textContent = card;
+        flipped.push(cardElem);
+
+        if (flipped.length === 2) {
+          canFlip = false;
+          setTimeout(() => {
+            if (flipped[0].dataset.value === flipped[1].dataset.value) {
+              matchedPairs++;
+              flipped.forEach(c => c.style.background = "#8f8");
+              if (matchedPairs === cards.length / 2) {
+                alert("Anda berjaya! 15 markah diperoleh.");
+                currentScore += challenges[currentChallengeIndex].mark;
+                currentScoreSpan.textContent = currentScore;
+              }
+            } else {
+              flipped.forEach(c => c.textContent = "?");
+            }
+            flipped = [];
+            canFlip = true;
+          }, 1000);
+        }
+      };
+
+      board.appendChild(cardElem);
+    });
+
+    gameArea.appendChild(board);
+  }
+
+  // Cabaran seterusnya
+  function nextChallenge() {
+    currentChallengeIndex++;
+    if (currentChallengeIndex >= challenges.length) {
+      endGame();
+    } else {
+      loadChallenge(currentChallengeIndex);
+    }
+  }
+
+  // Tamat permainan
+  function endGame() {
+    alert(`Permainan tamat! Markah anda: ${currentScore}`);
+    currentPlayer.markah = currentScore;
+    showLeaderboard();
+    gameContainer.classList.add("hidden");
+    leaderboardContainer.classList.remove("hidden");
+  }
+
+  // Papar leaderboard
+  function showLeaderboard() {
+    leaderboardTableBody.innerHTML = "";
+    // Sort players ikut markah descending
+    players.sort((a,b) => b.markah - a.markah);
+    players.forEach(p => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${p.nama}</td><td>${p.kelas}</td><td>${p.markah}</td>`;
+      leaderboardTableBody.appendChild(tr);
+    });
+  }
+
+  // Restart permainan
+  function restartGame() {
+    leaderboardContainer.classList.add("hidden");
+    loginRegisterDiv.classList.remove("hidden");
+    document.getElementById("playerName").value = "";
+    document.getElementById("playerClass").value = "";
+    currentPlayer = null;
+    currentScore = 0;
+  }
+
+  // Papar laporan admin
+  function showAdminReport() {
+    adminReportTableBody.innerHTML = "";
+    if (players.length === 0) {
+      adminReportTableBody.innerHTML = "<tr><td colspan='3'>Tiada data pemain.</td></tr>";
+      championSpan.textContent = "-";
+      return;
+    }
+    // Sort pemain ikut markah tertinggi
+    players.sort((a,b) => b.markah - a.markah);
+    players.forEach(p => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${p.nama}</td><td>${p.kelas}</td><td>${p.markah}</td>`;
+      adminReportTableBody.appendChild(tr);
+    });
+    championSpan.textContent = `${players[0].nama} (${players[0].kelas}) dengan markah ${players[0].markah}`;
+  }
+
+  // Logout admin
+  function logoutAdmin() {
+    adminPanel.classList.add("hidden");
+    loginRegisterDiv.classList.remove("hidden");
+    document.getElementById("adminPassword").value = "";
+  }
+</script>
+
+</body>
+</html>
